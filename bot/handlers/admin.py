@@ -9,13 +9,17 @@ from bot.config import settings
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in settings.ADMIN_IDS
+async def check_admin(user_id: int) -> bool:
+    """چک کردن ادمین بودن از دیتابیس + لیست تنظیمات"""
+    if user_id in settings.ADMIN_IDS:
+        return True
+    user = await q.get_user(user_id)
+    return bool(user and user.get("is_admin") == 1)
 
 
 @router.callback_query(F.data == "menu:admin")
 async def admin_menu(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not await check_admin(callback.from_user.id):
         await callback.answer("دسترسی نداری!", show_alert=True)
         return
     
@@ -39,7 +43,8 @@ async def admin_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin:broadcast")
 async def broadcast_start(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
+    if not await check_admin(callback.from_user.id):
+        await callback.answer("دسترسی نداری!", show_alert=True)
         return
     await state.set_state(AdminBroadcast.message)
     await callback.message.edit_text("پیام گروهی رو بنویس (برای همه کاربران ارسال می‌شه):")
@@ -48,7 +53,7 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminBroadcast.message)
 async def broadcast_send(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+    if not await check_admin(message.from_user.id):
         return
     users = await q.get_all_users()
     success = 0
@@ -64,7 +69,8 @@ async def broadcast_send(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "admin:stats")
 async def admin_stats(callback: CallbackQuery):
-    if not is_admin(callback.from_user.id):
+    if not await check_admin(callback.from_user.id):
+        await callback.answer("دسترسی نداری!", show_alert=True)
         return
     total = await q.count_users()
     await callback.message.edit_text(
