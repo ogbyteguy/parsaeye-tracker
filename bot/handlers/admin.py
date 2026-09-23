@@ -11,10 +11,18 @@ router = Router()
 
 async def check_admin(user_id: int) -> bool:
     """چک کردن ادمین بودن از دیتابیس + لیست تنظیمات"""
-    if user_id in settings.ADMIN_IDS:
+    # اول از لیست تنظیمات چک کن
+    admin_ids = getattr(settings, "ADMIN_IDS", [])
+    if isinstance(admin_ids, list) and user_id in admin_ids:
         return True
+    
+    # بعد از دیتابیس چک کن
     user = await q.get_user(user_id)
-    return bool(user and user.get("is_admin") == 1)
+    if not user:
+        return False
+    
+    # هر مقدار حقیقت‌مانند را قبول کن (1, True, "1" و ...)
+    return bool(user.get("is_admin"))
 
 
 @router.callback_query(F.data == "menu:admin")
@@ -27,7 +35,8 @@ async def admin_menu(callback: CallbackQuery):
     
     text = (
         f"👑 <b>پنل ادمین</b>\n\n"
-        f"👥 تعداد کل کاربران: {total_users}\n"
+        f"👥 تعداد کل کاربران: <b>{total_users}</b>\n\n"
+        "از دکمه‌های زیر استفاده کن:"
     )
     
     from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -47,7 +56,10 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
         await callback.answer("دسترسی نداری!", show_alert=True)
         return
     await state.set_state(AdminBroadcast.message)
-    await callback.message.edit_text("پیام گروهی رو بنویس (برای همه کاربران ارسال می‌شه):")
+    await callback.message.edit_text(
+        "📢 پیام گروهی رو بنویس:\n"
+        "(این پیام برای همه کاربران ارسال می‌شه)"
+    )
     await callback.answer()
 
 
@@ -55,16 +67,29 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
 async def broadcast_send(message: Message, state: FSMContext):
     if not await check_admin(message.from_user.id):
         return
+    
     users = await q.get_all_users()
     success = 0
+    failed = 0
+    
     for u in users:
         try:
-            await message.bot.send_message(u["user_id"], f"📢 پیام از ادمین:\n\n{message.text}")
+            await message.bot.send_message(
+                u["user_id"], 
+                f"📢 <b>پیام از ادمین:</b>\n\n{message.text}",
+                parse_mode="HTML"
+            )
             success += 1
         except:
-            pass
+            failed += 1
+    
     await state.clear()
-    await message.answer(f"✅ پیام به {success} کاربر ارسال شد.", reply_markup=back_to_main_kb())
+    await message.answer(
+        f"✅ پیام گروهی ارسال شد.\n"
+        f"موفق: {success}\n"
+        f"ناموفق: {failed}",
+        reply_markup=back_to_main_kb()
+    )
 
 
 @router.callback_query(F.data == "admin:stats")
@@ -72,9 +97,13 @@ async def admin_stats(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         await callback.answer("دسترسی نداری!", show_alert=True)
         return
+    
     total = await q.count_users()
-    await callback.message.edit_text(
-        f"📊 آمار:\nکل کاربران: {total}",
-        reply_markup=back_to_main_kb()
+    
+    text = (
+        f"📊 <b>آمار کلی ربات</b>\n\n"
+        f"👥 تعداد کل کاربران: <b>{total}</b>\n"
     )
+    
+    await callback.message.edit_text(text, reply_markup=back_to_main_kb(), parse_mode="HTML")
     await callback.answer()
