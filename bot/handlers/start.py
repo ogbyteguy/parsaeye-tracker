@@ -1,8 +1,8 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from bot.database import queries as q
-from bot.keyboards.main_menu import main_menu_kb
+from bot.keyboards.main_menu import main_menu_kb, back_to_main_kb
 from bot.config import settings
 from bot.utils.jalali import today_jalali, jalali_to_display
 
@@ -17,10 +17,7 @@ async def cmd_start(message: Message):
         full_name=message.from_user.full_name
     )
     
-    is_admin = (
-        message.from_user.id in settings.ADMIN_IDS 
-        or user.get("is_admin") == 1
-    )
+    is_admin = bool(user.get("is_admin")) or (message.from_user.id in getattr(settings, "ADMIN_IDS", []))
     
     text = (
         f"سلام {message.from_user.first_name} عزیز! 🌟\n\n"
@@ -45,12 +42,11 @@ async def become_admin(message: Message):
     await q.update_user(message.from_user.id, is_admin=1)
     
     await message.answer(
-        "✅ شما با موفقیت به عنوان **ادمین** ثبت شدید!\n"
+        "✅ شما با موفقیت به عنوان <b>ادمین</b> ثبت شدید!\n"
         "حالا از منوی اصلی می‌تونی به پنل ادمین دسترسی داشته باشی.",
         parse_mode="HTML"
     )
     
-    # منوی جدید با دکمه ادمین نشون بده
     await message.answer(
         "منوی اصلی به‌روز شد:",
         reply_markup=main_menu_kb(is_admin=True)
@@ -60,10 +56,7 @@ async def become_admin(message: Message):
 @router.callback_query(F.data == "menu:main")
 async def back_to_main(callback: CallbackQuery):
     user = await q.get_user(callback.from_user.id)
-    is_admin = (
-        callback.from_user.id in settings.ADMIN_IDS 
-        or (user and user.get("is_admin") == 1)
-    )
+    is_admin = bool(user and user.get("is_admin")) or (callback.from_user.id in getattr(settings, "ADMIN_IDS", []))
     
     await callback.message.edit_text(
         "🏠 <b>منوی اصلی</b>\n\nیکی از بخش‌ها رو انتخاب کن:",
@@ -87,6 +80,18 @@ async def help_menu(callback: CallbackQuery):
         "💡 همه تاریخ‌ها جلالی هستن.\n"
         "دکمه‌های شیشه‌ای رو لمس کن و لذت ببر!"
     )
-    from bot.keyboards.main_menu import back_to_main_kb
+    await callback.message.edit_text(text, reply_markup=back_to_main_kb(), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:settings")
+async def settings_menu(callback: CallbackQuery):
+    text = (
+        "⚙️ <b>تنظیمات</b>\n\n"
+        "این بخش به زودی کامل‌تر می‌شود.\n\n"
+        "فعلاً می‌تونی:\n"
+        "• برای ادمین شدن رمز مخفی رو ارسال کنی\n"
+        "• از منوی اصلی استفاده کنی"
+    )
     await callback.message.edit_text(text, reply_markup=back_to_main_kb(), parse_mode="HTML")
     await callback.answer()
