@@ -17,7 +17,10 @@ async def cmd_start(message: Message):
         full_name=message.from_user.full_name
     )
     
-    is_admin = message.from_user.id in settings.ADMIN_IDS or user.get("is_admin")
+    is_admin = (
+        message.from_user.id in settings.ADMIN_IDS 
+        or user.get("is_admin") == 1
+    )
     
     text = (
         f"سلام {message.from_user.first_name} عزیز! 🌟\n\n"
@@ -36,10 +39,31 @@ async def cmd_start(message: Message):
     await message.answer(text, reply_markup=main_menu_kb(is_admin=is_admin), parse_mode="HTML")
 
 
+@router.message(F.text == settings.ADMIN_SECRET)
+async def become_admin(message: Message):
+    """با فرستادن رمز مخفی، کاربر ادمین می‌شود"""
+    await q.update_user(message.from_user.id, is_admin=1)
+    
+    await message.answer(
+        "✅ شما با موفقیت به عنوان **ادمین** ثبت شدید!\n"
+        "حالا از منوی اصلی می‌تونی به پنل ادمین دسترسی داشته باشی.",
+        parse_mode="HTML"
+    )
+    
+    # منوی جدید با دکمه ادمین نشون بده
+    await message.answer(
+        "منوی اصلی به‌روز شد:",
+        reply_markup=main_menu_kb(is_admin=True)
+    )
+
+
 @router.callback_query(F.data == "menu:main")
 async def back_to_main(callback: CallbackQuery):
     user = await q.get_user(callback.from_user.id)
-    is_admin = callback.from_user.id in settings.ADMIN_IDS or (user and user.get("is_admin"))
+    is_admin = (
+        callback.from_user.id in settings.ADMIN_IDS 
+        or (user and user.get("is_admin") == 1)
+    )
     
     await callback.message.edit_text(
         "🏠 <b>منوی اصلی</b>\n\nیکی از بخش‌ها رو انتخاب کن:",
